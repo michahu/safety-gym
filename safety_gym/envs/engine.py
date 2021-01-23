@@ -95,6 +95,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     # Default configuration (this should not be nested since it gets copied)
     DEFAULT = {
+        'constrained_object': None,
         'num_steps': 1000,  # Maximum number of environment steps in an episode
 
         'action_noise': 0.0,  # Magnitude of independent per-component gaussian action noise
@@ -397,6 +398,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
         ''' Construct observtion space.  Happens only once at during __init__ '''
         obs_space_dict = OrderedDict()  # See self.obs()
 
+        # NEW CODE FOR HAZARDWORLD3D
+        if self.constrained_object:
+            obs_space_dict['constrained_object'] = gym.spaces.Box(0, 4, (1,), dtype=np.float32)
         if self.observe_freejoint:
             obs_space_dict['freejoint'] = gym.spaces.Box(-np.inf, np.inf, (7,), dtype=np.float32)
         if self.observe_com:
@@ -1037,11 +1041,24 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 obs[bin_minus] = max(obs[bin_minus], (1 - alias) * sensor)
         return obs
 
+    def obs_language(self, constrained_object):
+        options = {
+            'pillars': 0,
+            'hazards': 1,
+            'vases': 2,
+            'gremlins': 3,
+            'buttons': 4
+        }
+        val = options[constrained_object]
+        return np.array([val])
+
     def obs(self):
         ''' Return the observation of our agent '''
         self.sim.forward()  # Needed to get sensordata correct
         obs = {}
 
+        if self.constrained_object:
+            obs['constrained_object'] = self.obs_language(self.constrained_object) 
         if self.observe_goal_dist:
             obs['goal_dist'] = np.array([np.exp(-self.dist_goal())])
         if self.observe_goal_comp:
