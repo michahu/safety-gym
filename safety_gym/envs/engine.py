@@ -8,6 +8,9 @@ from copy import deepcopy
 from collections import OrderedDict
 import mujoco_py
 from mujoco_py import MjViewer, MujocoException, const, MjRenderContextOffscreen
+import json
+import random
+from pathlib import Path
 
 from safety_gym.envs.world import World, Robot
 
@@ -48,6 +51,42 @@ ORIGIN_COORDINATES = np.zeros(3)
 # Constant defaults for rendering frames for humans (not used for vision)
 DEFAULT_WIDTH = 256
 DEFAULT_HEIGHT = 256
+
+STOI = {
+    'do': 0,
+    'not': 1,
+    'don\'t': 2,
+    'never': 3,
+    'cross': 4,
+    'touch': 5,
+    'move': 6,
+    'go': 7,
+    'travel': 8,
+    'pass': 9,
+    'walk': 10,
+    'crossing': 11,
+    'touching': 12,
+    'moving': 13,
+    'going': 14,
+    'traveling': 15,
+    'passing' : 16,
+    'walking': 17,
+    'through': 18,
+    'on': 19,
+    'upon': 20,
+    'to': 21,
+    'reach': 22,
+    'move to': 23,
+    'once': 24,
+    'twice': 25,
+    'three times': 26,
+    'lava': 27,
+    'water': 28,
+    'grass': 29,
+    'more': 30,
+    'less': 31,
+    'than': 32
+}
 
 class ResamplingError(AssertionError):
     ''' Raised when we fail to sample a valid distribution of objects or goals '''
@@ -96,6 +135,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
     # Default configuration (this should not be nested since it gets copied)
     DEFAULT = {
         'constrained_object': None,
+        # language 
+        'use_language': False,
         'num_steps': 1000,  # Maximum number of environment steps in an episode
 
         'action_noise': 0.0,  # Magnitude of independent per-component gaussian action noise
@@ -310,6 +351,13 @@ class Engine(gym.Env, gym.utils.EzPickle):
         self.build_observation_space()
         self.build_placements_dict()
 
+
+        this_folder = Path(__file__).parent
+        templates_path = this_folder.joinpath("templates.json")
+        json_path = Path(templates_path)
+        with json_path.open(mode='r') as json_file: 
+            self.missions = json.load(json_file) 
+
         self.viewer = None
         self.world = None
         self.clear()
@@ -399,7 +447,10 @@ class Engine(gym.Env, gym.utils.EzPickle):
         obs_space_dict = OrderedDict()  # See self.obs()
 
         # NEW CODE FOR HAZARDWORLD3D
-        if self.constrained_object:
+        if self.use_language:
+            obs_space_dict['language'] = gym.spaces.Box(0, 49, (100, ), dtype=np.float32)
+        # cannot use language and feed ground truth identity at the same time
+        elif self.constrained_object:
             obs_space_dict['constrained_object'] = gym.spaces.Box(0, 4, (1,), dtype=np.float32)
         if self.observe_freejoint:
             obs_space_dict['freejoint'] = gym.spaces.Box(-np.inf, np.inf, (7,), dtype=np.float32)
@@ -1052,12 +1103,32 @@ class Engine(gym.Env, gym.utils.EzPickle):
         val = options[constrained_object]
         return np.array([val])
 
+    def get_mission(self):
+        mission = random.choice(self.missions['templates'])
+        mission = mission.format(self.constrained_object)
+        return mission 
+
+    def encode_mission(self, mission):
+        encoding = []
+        for word in mission[0].split():
+            if word not in STOI:
+                STOI[word] = len(STOI)
+            encoding.append(STOI[word])
+
+        encoding = np.array(encoding)
+        vec = np.zeros((100,))
+        vec[:len(encoding)] = encoding
+        return vec
+
     def obs(self):
         ''' Return the observation of our agent '''
         self.sim.forward()  # Needed to get sensordata correct
         obs = {}
 
-        if self.constrained_object:
+        if self.use_language:
+            mission = self.get_mission()
+            obs['language'] = self.encode_mission(mission)
+        elif self.constrained_object:
             obs['constrained_object'] = self.obs_language(self.constrained_object) 
         if self.observe_goal_dist:
             obs['goal_dist'] = np.array([np.exp(-self.dist_goal())])
