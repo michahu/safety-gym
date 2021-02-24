@@ -1148,8 +1148,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     cost['cost_pillars'] += self.pillars_cost
             if buttons_constraints_active and any(n.startswith('button') for n in geom_names):
                 if any(n in self.robot.geom_names for n in geom_names):
-                    if not any(n == f'button{self.goal_button}' for n in geom_names):
-                        cost['cost_buttons'] += self.buttons_cost
+                    # if not any(n == f'button{self.goal_button}' for n in geom_names):
+                    cost['cost_buttons'] += self.buttons_cost
             if self.constrain_gremlins and any(n.startswith('gremlin') for n in geom_names):
                 if any(n in self.robot.geom_names for n in geom_names):
                     cost['cost_gremlins'] += self.gremlins_contact_cost
